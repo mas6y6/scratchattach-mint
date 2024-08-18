@@ -340,7 +340,7 @@ class TwCloudEvents(CloudEvents):
             self.purpose = ""
         if not "contact" in entries:
             self.contact = ""
-            print("Warning: You connected to TurboWarp's cloud without giving the `contact` argument.\nTurboWarp would like to you to identify yourself by providing a way you can be contacted (like your Scratch account for example): TwCloudEvents('project_id', contact='your_contact_info')\nThis is optional at the moment, but it helps TurboWarp to understand who is using their cloud service.")
+            ("Warning: You connected to TurboWarp's cloud without giving the `contact` argument.\nTurboWarp would like to you to identify yourself by providing a way you can be contacted (like your Scratch account for example): TwCloudEvents('project_id', contact='your_contact_info')\nThis is optional at the moment, but it helps TurboWarp to understand who is using their cloud service.")
         cloud_connection = TwCloudConnection(project_id=project_id, purpose=self.purpose, contact=self.contact)
         self.data = []
         self._thread = None

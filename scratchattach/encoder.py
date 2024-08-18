@@ -1,5 +1,8 @@
 import math
 from . import exceptions
+import logging, traceback
+
+logger = logging.Logger("Encoder")
 
 letters = [
     None,
@@ -104,7 +107,6 @@ letters = [
     "'"
 ]
 
-
 class Encoding:
     """
     Class that contains tools for encoding / decoding strings. The strings encoded / decoded with these functions can be decoded / encoded with Scratch using this sprite: https://scratch3-assets.1tim.repl.co/Encoder.sprite3
@@ -120,6 +122,8 @@ class Encoding:
         try:
             inp = str(inp)
         except Exception:
+            logger.error("Invaild or corrupted decode was sent:")
+            logger.error(traceback.format_exc())
             raise(exceptions.InvalidDecodeInput)
         outp = ""
         for i in range(0, math.floor(len(inp) / 2)):

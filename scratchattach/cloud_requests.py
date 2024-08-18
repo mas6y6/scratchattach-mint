@@ -10,6 +10,7 @@ import traceback
 import warnings
 from . import exceptions
 import requests
+import logging
 
 class CloudRequests:
     """
@@ -56,6 +57,7 @@ class CloudRequests:
                  _force_reconnect = False, # this argument is no longer used and only exists for backwards compatibility
                  _log_url="https://clouddata.scratch.mit.edu/logs",
                  _packet_length=245,
+                 logger = logging.Logger("CloudRequests"),
                  **kwargs
                  ):
         if _log_url != "https://clouddata.scratch.mit.edu/logs":
@@ -75,7 +77,8 @@ class CloudRequests:
         self.ignore_exceptions = ignore_exceptions
         self.log_url = _log_url
         self.packet_length = _packet_length
-
+        self.logger = logger
+        
         self.init_attributes()
 
     def request(self, function=None, *, enabled=True, name=None, thread=False):
@@ -112,9 +115,7 @@ class CloudRequests:
         request = req_obj["name"]
         try:
             if not req_obj["enabled"]: # Checks if the request is disabled
-                print(
-                    f"Warning: Client received the disabled request '{request}'"
-                )
+                self.logger.warning(f"Client received the disabled request '{request}'")
                 self.call_event("on_disabled_request", [
                     self.Request(name=request,
                                  request=request,
@@ -123,6 +124,15 @@ class CloudRequests:
                                  arguments=arguments,
                                  request_id=request_id)
                 ]) # If the request is disabled, the event is called
+                if req_obj["thread"]:
+                # If this function is running in a thread, the output is saved in the self.outputs list and parsed by the main request handler
+                    self.outputs[request_id] = {
+                        "output": ["Error: Client received disabled request!","disabled_request"]
+                        "request": req_obj
+                    }
+                else:
+                    # If this function is not running in a thread, the output is returned directly 
+                    self._parse_output(["Error: Client received disabled request!","disabled_request"], request, req_obj, request_id)
                 return None
             output = req_obj["on_call"](*arguments) # Calls the request function and saves the function's returned data in the output variable
             
@@ -146,23 +156,21 @@ class CloudRequests:
                              request_id=request_id), e
             ])
             if self.ignore_exceptions:
-                print(
-                    f"Warning: Caught error in request '{request}' - Full error below"
-                )
+                self.logger.error(f"Error was raised in '{request}:'")
                 try:
-                    traceback.print_exc()
+                    self.logger.error(traceback.format_exc)
                 except Exception:
-                    print(e)
+                    self.logger.error(e)
             else:
-                print(f"Warning: Exception in request '{request}':")
+                self.logger.error(f"Error was raised in '{request}':")
                 raise (e)
             if req_obj["thread"]:
                 self.outputs[request_id] = {
-                    "output": f"Error: Check the Python console",
+                    "output": [f"Error: Check the Python console","internal_error"],
                     "request": req_obj
                 }
             else:
-                self._parse_output("Error: Check the Python console", request,
+                self._parse_output([f"Error: Check the Python console","internal_error"], request,
                                    req_obj, request_id)
 
     def add_request(self, function, *, enabled=True, name=None):
@@ -191,6 +199,7 @@ class CloudRequests:
             thread (boolean): Whether the request should be run in a thread
         """
         if name not in self.requests:
+            self.logger.error("Request Not found upon 'edit_request' function")
             raise (exceptions.RequestNotFound(name))
         if enabled is not None:
             self.requests[name]["enabled"] = enabled
@@ -368,9 +377,7 @@ class CloudRequests:
         Prepares the transmission of the request output to the Scratch project
         """
         if len(str(output)) > 3000:
-            print(
-                f"Warning: Output of request '{request}' is longer than 3000 characters (length: {len(str(output))} characters). Responding the request will take >4 seconds."
-            )
+            self.logger.warning("Output of request '{request}' is longer than 3000 characters (length: {len(str(output))} characters). Responding the request will take >4 seconds")
 
         if str(request_id).endswith("0"):
             try:
@@ -383,7 +390,7 @@ class CloudRequests:
             send_as_integer = False
 
         if output is None:
-            print(f"Warning: Request '{request}' didn't return anything.")
+            self.logger.error(f"Request '{request}' responce is empty")
             return
         elif send_as_integer:
             output = str(output)
@@ -425,7 +432,7 @@ class CloudRequests:
         self.responded_request_ids = []
 
         if self.requests == []:
-            warnings.warn("You haven't added any requests!", RuntimeWarning)
+            self.logger.warning("You haven't added any requests!")
 
         while events != []:
             event_handler = events.pop()
@@ -524,9 +531,7 @@ class CloudRequests:
 
                 # Check if the request is unknown:
                 if request not in self.requests:
-                    print(
-                        f"Warning: Client received an unknown request called '{request}'"
-                    )
+                    self.logger.warning(f"Received an unknown request called '{request}'")
                     self.call_event("on_unknown_request", [
                         self.Request(name=request,
                                      request=request,
@@ -535,8 +540,14 @@ class CloudRequests:
                                      arguments=arguments,
                                      request_id=request_id)
                     ])
-                    continue
-                else:
+                    if self.respond_in_thread: #mas6y6: I did not know how to use this but I used it
+                        self.outputs[request_id] = {
+                            "output": ["Error: Client did not find that request!","request_not_found"],
+                            "request": None
+                        }
+                    else:
+                        self._parse_output(["Error: Client did not find that request!","request_not_found"], request, None, request_id)
+                        continue
                     # If the request is not unknown, it is called
                     req_obj = self.requests[request]
                     self.last_request_id = request_id
